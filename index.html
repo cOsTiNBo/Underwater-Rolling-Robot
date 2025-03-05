@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Motor Control Dashboard</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            background-color: #121212;
+            color: #ffffff;
+            text-align: center;
+        }
+        .container {
+            width: 90%;
+            max-width: 800px;
+            margin: auto;
+            padding: 20px;
+        }
+        .section {
+            margin-bottom: 20px;
+            padding: 20px;
+            border-radius: 10px;
+            background-color: #1e1e1e;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        }
+        h2, h3 {
+            color: #03dac6;
+        }
+        .checkbox-container, .radio-container {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+        }
+        .slider {
+            width: 100%;
+        }
+        table {
+            width: 100%;
+            margin-top: 10px;
+            border-collapse: collapse;
+            background-color: #2a2a2a;
+        }
+        th, td {
+            padding: 10px;
+            text-align: center;
+            border: 1px solid #444;
+        }
+        button {
+            background-color: #03dac6;
+            color: #121212;
+            border: none;
+            padding: 12px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            border-radius: 5px;
+            margin: 10px;
+        }
+        button:hover {
+            background-color: #02c0b3;
+        }
+        input[type="number"] {
+            padding: 10px;
+            width: 100px;
+            font-size: 16px;
+            text-align: center;
+            border-radius: 5px;
+            border: 1px solid #555;
+            background-color: #222;
+            color: #fff;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>Motor Control Dashboard</h2>
+
+        <div class="section">
+            <h3>Select Motor</h3>
+            <div class="checkbox-container">
+                <label><input type="checkbox" id="motor1" onclick="toggleMotor(1)"> Motor 1</label>
+                <label><input type="checkbox" id="motor2" onclick="toggleMotor(2)"> Motor 2</label>
+            </div>
+            <input type="hidden" id="motorInput">
+        </div>
+
+        <div class="section">
+            <h3>Mode Selection</h3>
+            <div class="radio-container">
+                <label><input type="radio" name="mode" value="1"> Velocity Mode</label>
+                <label><input type="radio" name="mode" value="2"> Position Mode</label>
+            </div>
+        </div>
+
+        <div class="section">
+            <h3>Velocity Control</h3>
+            <input type="range" id="velocity" class="slider" min="-200" max="200" value="0">
+            <p>Velocity: <span id="velocityValue">0</span></p>
+        </div>
+
+        <div class="section">
+            <h3>Position Control</h3>
+            <input type="number" id="position" min="0" max="4095" value="0">
+        </div>
+
+        <div class="section">
+            <button onclick="sendCommand()">Send Command</button>
+            <button onclick="stopMotor()" style="background-color: #ff3b3b; color: white;">Stop</button>
+        </div>
+
+    <script>
+        let selectedMotors = [];
+
+        function toggleMotor(motor) {
+            if (selectedMotors.includes(motor)) {
+                selectedMotors = selectedMotors.filter(m => m !== motor);
+            } else {
+                selectedMotors.push(motor);
+            }
+            document.getElementById("motorInput").value = selectedMotors.join(",");
+        }
+
+        function sendCommand() {
+            let mode = document.querySelector('input[name="mode"]:checked')?.value;
+            let velocity = document.getElementById("velocity").value;
+            let position = document.getElementById("position").value;
+            let motors = document.getElementById("motorInput").value;
+
+            if (!mode) {
+                alert(" Please select a mode.");
+                return;
+            }
+            if (!motors) {
+                alert(" Please select at least one motor.");
+                return;
+            }
+
+            let data = new FormData();
+            data.append("mode", mode);
+            data.append("velocity", mode == "1" ? velocity : null);
+            data.append("position", mode == "2" ? position : null);
+            data.append("motor", motors);
+
+            fetch("/control", {
+                method: "POST",
+                body: data
+            }).then(response => alert(" Command Sent!"))
+              .catch(error => alert(" Error sending command."));
+        }
+
+        function stopMotor() {
+            fetch("/control", {
+                method: "POST",
+                body: new FormData(Object.assign(new FormData(), { mode: "0", velocity: "0", position: "0", motor: selectedMotors.join(",") }))
+            }).then(response => alert(" Motors Stopped!"))
+              .catch(error => alert(" Error stopping motor."));
+        }
+
+        document.getElementById("velocity").addEventListener("input", function() {
+            document.getElementById("velocityValue").innerText = this.value;
+        });
+    </script>
+</body>
+</html>
