@@ -62,6 +62,7 @@ class DynamixelDualMotorController(Node):
 
         # Subscribe to topics for both motors
         self.create_subscription(Int32, 'motor_mode', self.set_motor_mode, 10)
+        self.create_subscription(Int32, 'motor_torque', self.disable_torque, 10)
         self.create_subscription(Int32, 'motor1_velocity', self.set_motor1_velocity, 10)
         self.create_subscription(Int32, 'motor2_velocity', self.set_motor2_velocity, 10)
         self.create_subscription(Int32, 'motor1_position', self.set_motor1_position, 10)
@@ -108,7 +109,13 @@ class DynamixelDualMotorController(Node):
 
         self.enable_torque(DXL_ID_1)
         self.enable_torque(DXL_ID_2)
-
+   
+    def disable_torque(self, msg):
+    if msg.data == 0:  # Check if command is to disable torque
+        self.packet_handler.write1ByteTxRx(self.port_handler, DXL_ID_1, ADDR_TORQUE_ENABLE, TORQUE_DISABLE)
+        self.packet_handler.write1ByteTxRx(self.port_handler, DXL_ID_2, ADDR_TORQUE_ENABLE, TORQUE_DISABLE)
+        self.get_logger().info("Torque Disabled for both motors")
+        
     def set_motor1_velocity(self, msg):
         if self.current_mode == 'velocity':
             velocity = msg.data
