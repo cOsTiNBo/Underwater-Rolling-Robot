@@ -36,7 +36,7 @@ class DynamixelMotorController(Node):
     def __init__(self):
         super().__init__('dynamixel_motor_controller')
 
-        # Initialize Port and Packet Handlers
+        # Initialise Port and Packet Handlers
         self.port_handler = PortHandler(DEVICENAME)
         self.packet_handler = PacketHandler(PROTOCOL_VERSION)
 
@@ -78,7 +78,7 @@ class DynamixelMotorController(Node):
             writer.writerow([timestamp, temperature, current, voltage])
 
     def set_motor_mode(self, msg):
-        """Switch motor control mode (Velocity or Position)."""
+        "Switch motor control mode (Velocity or Position)."
         mode = msg.data
         self.disable_torque(DXL_ID_1)
         self.disable_torque(DXL_ID_2)
@@ -100,14 +100,14 @@ class DynamixelMotorController(Node):
         self.current_mode = mode
 
     def set_motor1_velocity(self, msg):
-        """Set velocity for Motor 1."""
+        "Set velocity for Motor 1."
         if self.current_mode == VELOCITY_CONTROL_MODE:
             velocity = msg.data
             self.packet_handler.write4ByteTxRx(self.port_handler, DXL_ID_1, ADDR_GOAL_VELOCITY, velocity)
             self.get_logger().info(f'Motor 1 - Velocity: {velocity}')
 
     def set_motor2_velocity(self, msg):
-        """Set velocity for Motor 2."""
+        "Set velocity for Motor 2."
         if self.current_mode == VELOCITY_CONTROL_MODE:
             velocity = msg.data
             self.packet_handler.write4ByteTxRx(self.port_handler, DXL_ID_2, ADDR_GOAL_VELOCITY, velocity)
@@ -121,14 +121,13 @@ class DynamixelMotorController(Node):
             self.get_logger().info(f'Motor 1 - Position: {position}')
 
     def set_motor2_position(self, msg):
-        """Set position for Motor 2."""
+        "Set position for Motor 2."
         if self.current_mode == POSITION_CONTROL_MODE:
             position = msg.data
             self.packet_handler.write4ByteTxRx(self.port_handler, DXL_ID_2, ADDR_GOAL_POSITION, position)
             self.get_logger().info(f'Motor 2 - Position: {position}')
 
     def publish_telemetry(self):
-        """Read and publish motor telemetry."""
         try:
             temperature, _, dxl_error = self.packet_handler.read1ByteTxRx(self.port_handler, DXL_ID_1, ADDR_PRESENT_TEMPERATURE)
             if dxl_error == 0:
@@ -156,15 +155,12 @@ class DynamixelMotorController(Node):
             self.get_logger().error(f"Failed to read telemetry: {str(e)}")
 
     def set_operating_mode(self, dxl_id, mode):
-        """Change motor operating mode."""
         self.packet_handler.write1ByteTxRx(self.port_handler, dxl_id, ADDR_OPERATING_MODE, mode)
 
     def enable_torque(self, dxl_id):
-        """Enable torque for motor."""
         self.packet_handler.write1ByteTxRx(self.port_handler, dxl_id, ADDR_TORQUE_ENABLE, TORQUE_ENABLE)
 
     def disable_torque(self, dxl_id):
-        """Disable torque for motor."""
         self.packet_handler.write1ByteTxRx(self.port_handler, dxl_id, ADDR_TORQUE_ENABLE, TORQUE_DISABLE)
 
     def destroy_node(self):
