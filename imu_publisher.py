@@ -24,7 +24,7 @@ VIN_OFF = 0x1E
 VIN_NBYTES = 2
 
 class PowerMonitor:
-    def __init__(self, bus=1, address=0x68, log_file="power_log.csv"):  # Change to 0x68 if needed
+    def __init__(self, bus=1, address=0x68, log_file="power_log.csv"):  
         self._bus = SMBus(bus)
         self.addr = address
         self.DELTA_RES = 25E-3 / 2  # adjust for your shunt (3 mΩ here)
@@ -67,7 +67,7 @@ class PowerMonitor:
             writer.writerow([timestamp, voltage, current, power])
 
     def close(self):
-        pass  # Nothing to close anymore
+        pass  
 
 
 class IMUPublisher(Node):
@@ -145,11 +145,10 @@ class IMUPublisher(Node):
             self.get_logger().info("IMU Data Published")
             imu_msg = Imu()
 
-            # Fill orientation (no W value from euler, so set W to 0.0 or estimate quaternion if needed)
             imu_msg.orientation.x = orientation[0] if orientation else 0.0
             imu_msg.orientation.y = orientation[1] if orientation else 0.0
             imu_msg.orientation.z = orientation[2] if orientation else 0.0
-            imu_msg.orientation.w = 0.0  # Placeholder
+            imu_msg.orientation.w = 0.0  
 
             # Angular velocity
             imu_msg.angular_velocity.x = gyroscope[0] if gyroscope else 0.0
