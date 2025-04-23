@@ -1,6 +1,7 @@
 import rclpy
 import csv
 import os
+import math
 from datetime import datetime
 from rclpy.node import Node
 from std_msgs.msg import Int32, Float32
@@ -49,6 +50,11 @@ class DynamixelDualMotorController(Node):
             return
 
         self.current_mode = None
+        self.sinusoidal_mode = False
+        self.min_velocity = 0
+        self.max_velocity = 0
+        self.frequency = 0.0
+        self.phase = 0.0
         self.goal_velocity = 0
 
         # Publishers for telemetry data
@@ -61,6 +67,7 @@ class DynamixelDualMotorController(Node):
 
         # Timer to periodically read telemetry
         self.create_timer(1.0, self.publish_telemetry)
+        self.create_timer(0.01, self.send_sinusoidal_velocity)
 
         # Subscribe to topics for both motors
         self.create_subscription(Int32, 'motor_mode', self.set_motor_mode, 10)
@@ -69,6 +76,10 @@ class DynamixelDualMotorController(Node):
         self.create_subscription(Int32, 'motor2_velocity', self.set_motor2_velocity, 10)
         self.create_subscription(Int32, 'motor1_position', self.set_motor1_position, 10)
         self.create_subscription(Int32, 'motor2_position', self.set_motor2_position, 10)
+        self.create_subscription(Int32, 'sinusoidal_mode', self.set_sinusoidal_mode, 10)
+        self.create_subscription(Int32, 'sin_min', self.set_min_velocity, 10)
+        self.create_subscription(Int32, 'sin_max', self.set_max_velocity, 10)
+        self.create_subscription(Int32, 'sinus_freq', self.set_frequency, 10)
 
         self.get_logger().info('Dual Motor Controller ready (Velocity/Position).')
 
@@ -169,19 +180,33 @@ class DynamixelDualMotorController(Node):
                 self.get_logger().info("Motor 2 Rebooted")
 
     def set_motor1_velocity(self, msg):
-        if self.current_mode == 'velocity':
+        if self.current_mode == 'velocity' and not self.sinusoidal_mode:
             velocity = msg.data
+            self.manual_velocity = velocity
             self.packet_handler.write4ByteTxRx(self.port_handler, DXL_ID_1, ADDR_GOAL_VELOCITY, velocity)
-            self.goal_velocity = velocity
-            self.goal_velocity_publisher.publish(Int32(data=velocity))
             self.get_logger().info(f'Motor 1 - Velocity: {velocity}')
 
     def set_motor2_velocity(self, msg):
-        if self.current_mode == 'velocity':
+        if self.current_mode == 'velocity' and not self.sinusoidal_mode:
             velocity = msg.data
-            self.packet_handler.write4ByteTxRx(
-                self.port_handler, DXL_ID_2, ADDR_GOAL_VELOCITY, velocity)
+            self.packet_handler.write4ByteTxRx(self.port_handler, DXL_ID_2, ADDR_GOAL_VELOCITY, velocity)
             self.get_logger().info(f'Motor 2 - Velocity: {velocity}')
+
+    def send_sinusoidal_velocity(self):
+        if self.current_mode != 'velocity' or not self.sinusoidal_mode:
+            return
+
+        amplitude = (self.max_velocity - self.min_velocity)
+        offset = (self.max_velocity + self.min_velocity)
+        velocity = int(offset + amplitude * math.sin(2 * math.pi * self.frequency * self.phase))
+
+        if velocity < 0:
+            velocity = velocity + 0x100000000
+
+        self.packet_handler.write4ByteTxRx(self.port_handler, DXL_ID_1, ADDR_GOAL_VELOCITY, velocity)
+        self.packet_handler.write4ByteTxRx(self.port_handler, DXL_ID_2, ADDR_GOAL_VELOCITY, -velocity)
+
+        self.phase += 0.01
 
     def set_motor1_position(self, msg):
         if self.current_mode == 'position':
@@ -196,6 +221,22 @@ class DynamixelDualMotorController(Node):
             self.packet_handler.write4ByteTxRx(
                 self.port_handler, DXL_ID_2, ADDR_GOAL_POSITION, position)
             self.get_logger().info(f'Motor 2 - Position: {position}')
+
+    def set_sinusoidal_mode(self, msg):
+        self.sinusoidal_mode = bool(msg.data)
+        self.get_logger().info(f'Sinusoidal mode set to: {self.sinusoidal_mode}')
+
+    def set_min_velocity(self, msg):
+        self.min_velocity = msg.data
+        self.get_logger().info(f'Sinusoidal amplitude set to: {self.min_velocity}')
+
+    def set_max_velocity(self, msg):
+        self.max_velocity = msg.data
+        self.get_logger().info(f'Sinusoidal offset set to: {self.max_velocity}')
+
+    def set_frequency(self, msg):
+        self.frequency = msg.data
+        self.get_logger().info(f'Sinusoidal frequency set to: {self.frequency}')
 
     def publish_telemetry(self):
         try:
