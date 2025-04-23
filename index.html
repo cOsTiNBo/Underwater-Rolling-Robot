@@ -160,7 +160,7 @@
               .catch(error => alert("Error stopping motors."))*/;
         }
 		setInterval(function () {
-			fetch('/telemetry')
+			fetch('/imu')
 				.then(response => response.json())
 				.then(data => {
 					let imu = data.imu;
@@ -177,11 +177,8 @@
 					document.getElementById('accel_y').innerText = imu.linear_acceleration[1];
 					document.getElementById('accel_z').innerText = imu.linear_acceleration[2];
 				})
-				.catch(error => console.error('Error fetching telemetry:', error));
+				.catch(error => console.error('Error fetching imu:', error));
 		}, 1000);
-
-
-        setInterval(updateTelemetry, 1000);
     </script>
 </body>
 </html>
