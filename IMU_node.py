@@ -3,7 +3,7 @@ import os
 import csv
 import busio
 from datetime import datetime
-from smbus2 import SMBus
+from smbus2 import SMBus # library used for the power monitor sensor
 from rclpy.node import Node
 from std_msgs.msg import Float32MultiArray
 import board
@@ -13,6 +13,7 @@ import adafruit_bus_device.i2c_device as i2c_dev
 
 CSV_FILE_PATH = "IMU_telemetry_log.csv"
 
+# Initialising variables for the power monitor conversion
 LTC2945_ADDR = 103
 ADIN_OFF = 0x28
 ADIN_NBYTES = 2
@@ -23,25 +24,28 @@ DELTA_SENSE_NBYTES = 2
 VIN_OFF = 0x1E
 VIN_NBYTES = 2
 
+# Class that handles the LTC2945 power monitor
 class PowerMonitor:
-    def __init__(self, bus=1, address=0x68, log_file="power_log.csv"):  
+    def __init__(self, bus=1, address=0x68, log_file="power_log.csv"):  # Choosing the communication address for the sensor, 0x68 in this case, can be changed to 0x67 if needed
         self._bus = SMBus(bus)
         self.addr = address
-        self.DELTA_RES = 25E-3 / 2  # adjust for your shunt (3 mΩ here)
-        self.VIN_RES = 0.025
+        self.DELTA_RES = 25E-3 / 2  # Dependent on the shunt resistor (2mohm) according to the schematic
+        self.VIN_RES = 0.025 # According to the datasheet
         self.POWER_RES = 6E-7
         self.log_file = log_file
         self._init_csv()
-        
+
+    # Create a csv file for the LTC2945
     def _init_csv(self):
         if not os.path.exists(self.log_file):
             with open(self.log_file, mode='w', newline='') as file:
                 writer = csv.writer(file)
-                writer.writerow(["Timestamp", "Voltage (V)", "Current (A)", "Power (W)"])    
-        
+                writer.writerow(["Timestamp", "Voltage (V)", "Current (A)", "Power (W)"])
+
     def get_data(self, off, nbytes):
         return self._bus.read_i2c_block_data(self.addr, off, nbytes)
 
+    # Reading the coresponding address and converting the data from 16 to 12 bit values (voltage, current and power)
     def get_vin(self):
         data = self.get_data(0x1E, 2)
         vin = (data[0] << 4) | (data[1] >> 4)
@@ -56,7 +60,8 @@ class PowerMonitor:
         data = self.get_data(0x05, 3)
         val = data[0] + (data[1] << 8) + (data[2] << 16)
         return val * self.POWER_RES
-    
+
+    # Log the voltage, the current and the power to the specific csv file
     def log(self):
         voltage = self.get_vin()
         current = self.get_delta_sense()
@@ -67,17 +72,18 @@ class PowerMonitor:
             writer.writerow([timestamp, voltage, current, power])
 
     def close(self):
-        pass  
+        pass  # Nothing to close anymore
 
-
+# IMU class, main communication ROS node
 class IMUPublisher(Node):
     def __init__(self):
         super().__init__('imu_publisher')
 
-        # Initialize IMU sensor
+        # Initialise IMU sensor
         i2c = board.I2C()
         self.sensor = adafruit_bno055.BNO055_I2C(i2c)
 
+        # Initialise the power monior
         self.power = PowerMonitor()
 
         # Publishers for IMU data (all axes)
@@ -92,6 +98,7 @@ class IMUPublisher(Node):
 
         self.init_csv()
 
+    # Create a different csv file for the IMU values
     def init_csv(self):
         if not os.path.exists(CSV_FILE_PATH):
             with open(CSV_FILE_PATH, mode='w', newline='') as file:
@@ -102,6 +109,7 @@ class IMUPublisher(Node):
                                  "Linear Acceleration Z (m/s^2)", "Calibration sys", "Calibration gyro",
                                  "Calibration accel", "Calibration mag"])
 
+    # Log the values into the csv file
     def log_to_csv(self, orientation, gyroscope, linear_acceleration, calibration_status):
 
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -116,15 +124,15 @@ class IMUPublisher(Node):
     def publish_imu_data(self):
         try:
             # Read IMU data
-            orientation = self.sensor.euler  # (X, Y, Z, W)
+            orientation = self.sensor.euler  # (X, Y, Z)
             gyroscope = self.sensor.gyro  # (X, Y, Z)
             linear_acceleration = self.sensor.linear_acceleration  # (X, Y, Z)
             calibration_status = self.sensor.calibration_status
 
-            # Publish Orientation (Quaternion: X, Y, Z, W)
+            # Publish Orientation (Quaternion: X, Y, Z, W; Euler: X, Y, Z)
             if orientation is not None:
-               msg = Float32MultiArray(data=[orientation[0], orientation[1], orientation[2]])
-               self.orientation_publisher.publish(msg)
+                msg = Float32MultiArray(data=[orientation[0], orientation[1], orientation[2]])
+                self.orientation_publisher.publish(msg)
 
             # Publish Angular Velocity (X, Y, Z)
             if gyroscope is not None:
@@ -145,10 +153,11 @@ class IMUPublisher(Node):
             self.get_logger().info("IMU Data Published")
             imu_msg = Imu()
 
+            # Fill orientation (no W value from euler, W is need only for quaternion)
             imu_msg.orientation.x = orientation[0] if orientation else 0.0
             imu_msg.orientation.y = orientation[1] if orientation else 0.0
             imu_msg.orientation.z = orientation[2] if orientation else 0.0
-            imu_msg.orientation.w = 0.0  
+            imu_msg.orientation.w = 0.0  # Placeholder
 
             # Angular velocity
             imu_msg.angular_velocity.x = gyroscope[0] if gyroscope else 0.0
@@ -160,9 +169,12 @@ class IMUPublisher(Node):
             imu_msg.linear_acceleration.y = linear_acceleration[1] if linear_acceleration else 0.0
             imu_msg.linear_acceleration.z = linear_acceleration[2] if linear_acceleration else 0.0
 
+            # Other values can be read from he IMU such as magnetic field and temperature
+
             self.imu_data_publisher.publish(imu_msg)
             self.log_to_csv(orientation, gyroscope, linear_acceleration, calibration_status)
 
+            # Publish the power monitor's values
             self.power.log()
 
         except Exception as e:
