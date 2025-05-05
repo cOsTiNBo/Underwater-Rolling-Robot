@@ -1,3 +1,4 @@
+#import all the libraries
 from flask import Flask, render_template, request, jsonify
 import rclpy
 from rclpy.node import Node
@@ -5,7 +6,6 @@ from std_msgs.msg import Int32, Float32
 from sensor_msgs.msg import Imu
 
 app = Flask(__name__)
-
 
 class MotorControlNode(Node):
     def __init__(self):
@@ -16,8 +16,7 @@ class MotorControlNode(Node):
         self.velocity_publisher_1 = self.create_publisher(Int32, 'motor1_velocity', 10)
         self.velocity_publisher_2 = self.create_publisher(Int32, 'motor2_velocity', 10)
         self.reboot_publisher = self.create_publisher(Int32, 'motor_reboot', 10)
-        #self.telemetry = {
-        #    "imu": {"orientation": [0, 0, 0, 1], "angular_velocity": [0, 0, 0], "linear_acceleration": [0, 0, 0]}}
+        # Publishers for the sinusoidal control
         self.create_subscription(Imu, 'imu/data', self.update_imu, 10)
         self.sinusoidal_mode_pub = self.create_publisher(Int32, 'sinusoidal_mode', 10)
         self.sin_min_pub = self.create_publisher(Int32, 'sin_min', 10)
@@ -25,7 +24,7 @@ class MotorControlNode(Node):
         self.sin_freq_pub = self.create_publisher(Int32, 'sinus_freq', 10)
 
     def update_imu(self, msg):
-        """Update telemetry with IMU sensor data and log updates."""
+        # Updating telemetry with IMU sensor data and log updates for live viewing
         self.telemetry["imu"] = {
             "orientation": [msg.orientation.x, msg.orientation.y, msg.orientation.z, msg.orientation.w],
             "angular_velocity": [msg.angular_velocity.x, msg.angular_velocity.y, msg.angular_velocity.z],
@@ -34,23 +33,23 @@ class MotorControlNode(Node):
         self.get_logger().info(f"Updated IMU Data: {self.telemetry['imu']}")
 
     def enable_velocity_mode(self):
-        """Enable velocity mode"""
+        # Enable velocity mode
         mode_msg = Int32()
         mode_msg.data = 1  # Velocity Mode
         self.mode_publisher.publish(mode_msg)
         self.get_logger().info("Velocity Mode Enabled")
 
     def reboot_motors(self):
-        """Reboot both motors."""
+        # Reboot both motors
         reboot_msg = Int32()
         reboot_msg.data = 1  # Reboot command
         self.reboot_publisher.publish(reboot_msg)
         self.get_logger().info("Motors Rebooted")
 
     def send_velocity(self, speed):
-        """Send velocity to both motors"""
+        # Send linear velocity to both motors
         speed1 = int(speed)
-        speed2 = -speed1  # Opposite direction
+        speed2 = -speed1  # Opposite directions
 
         msg1 = Int32()
         msg2 = Int32()
@@ -61,10 +60,12 @@ class MotorControlNode(Node):
         self.velocity_publisher_2.publish(msg2)
 
     def toggle_sinusoidal_mode(self, enable):
+        # Enable sinusoidal mode
         self.sinusoidal_mode_pub.publish(Int32(data=1 if enable else 0))
         self.get_logger().info(f"Sinusoidal Mode: {'Enabled' if enable else 'Disabled'}")
 
     def set_sinusoidal_params(self, sin_min, sin_max, freq):
+        # Send sinusoidal velocity to both motors
         self.sin_min_pub.publish(Int32(data=sin_min))
         self.sin_max_pub.publish(Int32(data=sin_max))
         self.sin_freq_pub.publish(Int32(data=freq))
@@ -74,17 +75,15 @@ class MotorControlNode(Node):
 rclpy.init()
 ros_node = MotorControlNode()
 
-
 @app.route('/')
 def home():
-    return render_template('index.html')
-
+    return render_template('index.html') # calling the html template
 
 @app.route('/telemetry', methods=['GET'])
 def telemetry():
     return jsonify(ros_node.telemetry)
 
-
+# communication with the web interface and the main ros node for motor control
 @app.route('/control', methods=['POST'])
 def control():
     if "mode" in request.form:
@@ -128,4 +127,4 @@ if __name__ == '__main__':
     except KeyboardInterrupt:
         ros_node.destroy_node()
         rclpy.shutdown()
-
+        
