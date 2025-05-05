@@ -144,8 +144,7 @@
             fetch("/control", {
                 method: "POST",
                 body: data
-            })/*.then(response => alert("Motors Started!"))
-              .catch(error => alert("Error sending command."))*/;
+            });
         }
 
         function stopMotors() {
@@ -156,8 +155,7 @@
             fetch("/control", {
                 method: "POST",
                 body: data
-            })/*.then(response => alert("Motors Stopped!"))
-              .catch(error => alert("Error stopping motors."))*/;
+            });
         }
 		setInterval(function () {
 			fetch('/imu')
