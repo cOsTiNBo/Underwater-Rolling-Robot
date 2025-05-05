@@ -10,9 +10,9 @@ from sensor_msgs.msg import Joy
 
 # Motor Configuration
 DEVICENAME = '/dev/ttyUSB0'
-BAUDRATE = 57600
+BAUDRATE = 57600 # Can be incresed for faster responses
 PROTOCOL_VERSION = 2.0
-DXL_ID_1 = 1
+DXL_ID_1 = 1 # Different IDs for the motors in order to control individually
 DXL_ID_2 = 2
 
 # Control Table Addresses
@@ -25,7 +25,6 @@ ADDR_PRESENT_CURRENT = 126
 ADDR_PRESENT_VOLTAGE = 144
 ADDR_PRESENT_POSITION = 132
 ADDR_PRESENT_VELOCITY = 128
-# ADDR_MOVING = 122
 
 # Control Values
 TORQUE_ENABLE = 1
@@ -40,7 +39,7 @@ class DynamixelDualMotorController(Node):
     def __init__(self):
         super().__init__('dynamixel_dual_motor_controller')
 
-        # Initialize Port and Packet Handlers
+        # Initialise Port and Packet Handlers
         self.port_handler = PortHandler(DEVICENAME)
         self.packet_handler = PacketHandler(PROTOCOL_VERSION)
 
@@ -48,7 +47,7 @@ class DynamixelDualMotorController(Node):
             self.get_logger().error('Failed to open port or set baud rate.')
             rclpy.shutdown()
             return
-
+        # Initialiase variables
         self.current_mode = None
         self.sinusoidal_mode = False
         self.min_velocity = 0
@@ -69,7 +68,7 @@ class DynamixelDualMotorController(Node):
         self.create_timer(1.0, self.publish_telemetry)
         self.create_timer(0.01, self.send_sinusoidal_velocity)
 
-        # Subscribe to topics for both motors
+        # Subscribe to topics for both motors (liner and sinusoidal velocity)
         self.create_subscription(Int32, 'motor_mode', self.set_motor_mode, 10)
         self.create_subscription(Int32, 'motor_reboot', self.reboot_motors, 10)
         self.create_subscription(Int32, 'motor1_velocity', self.set_motor1_velocity, 10)
@@ -83,17 +82,20 @@ class DynamixelDualMotorController(Node):
 
         self.get_logger().info('Dual Motor Controller ready (Velocity/Position).')
 
+        # Subscribe to the joystick topic
         self.create_subscription(Joy, '/joy', self.joy_callback, 10)
 
+        # Initialise csv writing
         self.init_csv()
 
     def init_csv(self):
+    # Reading and writing important parameters from the motors
         if not os.path.exists(CSV_FILE_PATH):
             with open(CSV_FILE_PATH, mode='w', newline='') as file:
                 writer = csv.writer(file)
                 writer.writerow(["Timestamp", "Temperature (°C)", "Current (mA)", "Voltage (V)", "Position (°)",
                                  "Velocity (rev/min)", "Goal Velocity"])
-
+    # Log the parameters into csv
     def log_to_csv(self, temperature, current, voltage, position, velocity, goal_velocity):
 
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -103,8 +105,9 @@ class DynamixelDualMotorController(Node):
             writer.writerow([timestamp, temperature, current, voltage, position, velocity, goal_velocity])
 
     def set_motor_mode(self, msg):
+        # Choosing an operation mode
         mode = msg.data
-        self.disable_torque(DXL_ID_1)
+        self.disable_torque(DXL_ID_1) # Disabling torque before switching
         self.disable_torque(DXL_ID_2)
 
         if mode == 1:
@@ -121,22 +124,12 @@ class DynamixelDualMotorController(Node):
             self.get_logger().warn('Invalid mode selected')
             return
 
-        self.enable_torque(DXL_ID_1)
+        self.enable_torque(DXL_ID_1) # Enabling torque after switching
         self.enable_torque(DXL_ID_2)
-
-    #    def reboot_motors(self, msg):
-    #         if msg.data == 1:
-    #             self.packet_handler.write1ByteTxRx(self.port_handler, DXL_ID_1, 64, 0)  # Disable torque before reboot
-    #             self.packet_handler.write1ByteTxRx(self.port_handler, DXL_ID_2, 64, 0)
-    #
-    #             self.packet_handler.write1ByteTxRx(self.port_handler, DXL_ID_1, 8, 1)  # Reboot command for Motor 1
-    #             self.packet_handler.write1ByteTxRx(self.port_handler, DXL_ID_2, 8, 1)  # Reboot command for Motor 2
-    #
-    #             self.get_logger().info("Motors Rebooted")
 
     def joy_callback(self, msg):
         # Read joystick vertical axis for velocity (left Y-axis)
-        joystick_value = msg.axes[1]  # [-1.0, 1.0]
+        joystick_value = msg.axes[1]
         motor_velocity = int(joystick_value * 200)  # Scale to motor range
 
         # Read button inputs
@@ -158,6 +151,7 @@ class DynamixelDualMotorController(Node):
         self.packet_handler.write4ByteTxRx(self.port_handler, motor_id, ADDR_GOAL_VELOCITY, velocity)
 
     def reboot_motors(self, msg):
+        # Reboot the motors
         if msg.data == 1:
             # Disable torque before rebooting
             self.packet_handler.write1ByteTxRx(self.port_handler, DXL_ID_1, ADDR_TORQUE_ENABLE, TORQUE_DISABLE)
@@ -180,6 +174,7 @@ class DynamixelDualMotorController(Node):
                 self.get_logger().info("Motor 2 Rebooted")
 
     def set_motor1_velocity(self, msg):
+        # Set linear velocity to the first motor - each motor can be controlled individually in this section, same happens to the second motor
         if self.current_mode == 'velocity' and not self.sinusoidal_mode:
             velocity = msg.data
             self.manual_velocity = velocity
@@ -187,15 +182,18 @@ class DynamixelDualMotorController(Node):
             self.get_logger().info(f'Motor 1 - Velocity: {velocity}')
 
     def set_motor2_velocity(self, msg):
+        # Set linear velocity to the second motor
         if self.current_mode == 'velocity' and not self.sinusoidal_mode:
             velocity = msg.data
             self.packet_handler.write4ByteTxRx(self.port_handler, DXL_ID_2, ADDR_GOAL_VELOCITY, velocity)
             self.get_logger().info(f'Motor 2 - Velocity: {velocity}')
 
     def send_sinusoidal_velocity(self):
+        # Set sinusoidal velocity to boh motors - one motor has the invers speed of the other
         if self.current_mode != 'velocity' or not self.sinusoidal_mode:
             return
 
+        # Setting all the parameters to create the sinus wave
         amplitude = (self.max_velocity - self.min_velocity)
         offset = (self.max_velocity + self.min_velocity)
         velocity = int(offset + amplitude * math.sin(2 * math.pi * self.frequency * self.phase))
@@ -223,22 +221,27 @@ class DynamixelDualMotorController(Node):
             self.get_logger().info(f'Motor 2 - Position: {position}')
 
     def set_sinusoidal_mode(self, msg):
+        # Bool value to turn on and off the sinusoidal mode
         self.sinusoidal_mode = bool(msg.data)
         self.get_logger().info(f'Sinusoidal mode set to: {self.sinusoidal_mode}')
 
     def set_min_velocity(self, msg):
+        # Setting the minimum velocity for the sinus wave
         self.min_velocity = msg.data
         self.get_logger().info(f'Sinusoidal amplitude set to: {self.min_velocity}')
 
     def set_max_velocity(self, msg):
+        # Setting the maximum velocity for the sinus wave
         self.max_velocity = msg.data
         self.get_logger().info(f'Sinusoidal offset set to: {self.max_velocity}')
 
     def set_frequency(self, msg):
+        # Setting the frequency for the sinus wave
         self.frequency = msg.data
         self.get_logger().info(f'Sinusoidal frequency set to: {self.frequency}')
 
     def publish_telemetry(self):
+        # Publish telemtery from the first motor
         try:
             temperature, result, dxl_error = self.packet_handler.read1ByteTxRx(self.port_handler, DXL_ID_1,
                                                                                ADDR_PRESENT_TEMPERATURE)
@@ -278,6 +281,7 @@ class DynamixelDualMotorController(Node):
             else:
                 self.voltage_publisher.publish(Float32(data=0.0))
 
+            # Convert the values according to the Dynamixel Wizard to degrees, rev/min and volts
             position_degrees = position * 0.087891
             velocity_rev = velocity * 0.229
             voltageV = voltage / 10
@@ -287,6 +291,7 @@ class DynamixelDualMotorController(Node):
 
             self.voltage_publisher.publish(Float32(data=float(voltageV) / 10.0))
 
+            # Log the values into the csv file
             self.log_to_csv(temperature, current, voltageV, position_degrees, velocity_rev, self.goal_velocity * 0.229)
 
         except Exception as e:
