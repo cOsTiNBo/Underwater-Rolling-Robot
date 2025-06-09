@@ -9,7 +9,7 @@ import numpy as np
 CSV_PATH = 'Test1.csv'  # Path
 X_COLUMN = 'Time'
 Y_COLUMNS = ['Heading', 'Oscillation', 'Current']
-ANIMATION_DURATION = 43
+ANIMATION_DURATION = 43 #animation time based on video lenght
 FPS = 20
 
 
